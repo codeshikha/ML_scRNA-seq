@@ -1,0 +1,119 @@
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, confusion_matrix
+import shap
+from imblearn.over_sampling import SMOTE
+from collections import Counter
+import seaborn as sn
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from sklearn.multiclass import OneVsRestClassifier
+from sklearn.metrics import classification_report, roc_auc_score, roc_curve
+from sklearn.metrics import roc_curve, auc, confusion_matrix
+import matplotlib.pyplot as plt
+import seaborn as sn
+import matplotlib.pyplot as plt
+from imblearn.over_sampling import SMOTE
+
+
+# generate imbalanced multiclass classification data
+df = pd.read_csv('C:/Users/shikh/OneDrive/Documents/mtech project/pediatricglioblastoma/ml/training_data_ml_python.csv')
+print(df.head())
+# Separate features and target variable
+print(df.head())
+X = df.iloc[:, 1:]
+y = df.iloc[:, 0]
+
+# Split data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y,stratify=y, test_size=0.3, random_state=1000)
+
+smote = SMOTE(random_state=42)
+X_train_res, y_train_res = smote.fit_resample(X_train, y_train)
+
+counter = Counter(y_train_res)
+print(counter)
+
+
+# Create the XGBoost classifier object
+rfc = RandomForestClassifier(random_state=42)
+
+# Perform GridSearchCV to find optimal hyperparameters
+param_grid = {
+    'n_estimators': [10, 50, 100, 150, 200],
+    'max_depth': [1, 2, 5, 10],
+    'min_samples_split': [2, 5, 10],
+    'min_samples_leaf': [1, 2, 4, 6]
+}
+grid_search = GridSearchCV(rfc, param_grid=param_grid, cv=5, verbose=2)
+grid_search.fit(X_train_res, y_train_res)
+
+# Extract best estimator from GridSearchCV
+rfc_best = grid_search.best_estimator_
+print("Best parameters: ", grid_search.best_params_)
+print("Best score: ", grid_search.best_score_)
+
+# Train the model with best estimator
+rfc_best.fit(X_train_res, y_train_res)
+
+# Make predictions on test data
+y_pred = rfc_best.predict(X_test)
+explainer = shap.TreeExplainer(rfc_best)
+shap_values = explainer.shap_values(X_test)
+shap.summary_plot(shap_values, X_test, plot_type='bar')
+
+print(classification_report(y_test, y_pred))
+
+from sklearn.metrics import confusion_matrix
+cm = confusion_matrix(y_test, y_pred)
+print("Confusion Matrix : \n", cm)
+from sklearn.metrics import accuracy_score, confusion_matrix, roc_auc_score, roc_curve
+print ("Accuracy : ", accuracy_score(y_test, y_pred))
+confusion_matrix = pd.crosstab(y_test, y_pred, rownames=['Actual'], colnames=['Predicted'])
+sn.heatmap(confusion_matrix, annot=True)
+plt.imshow(confusion_matrix, cmap=plt.cm.Blues)
+plt.title('Confusion Matrix')
+plt.show()
+
+ovr_clf2 = OneVsRestClassifier(rfc_best)
+ovr_clf2.fit(X_train_res, y_train_res)
+
+# Evaluate the OvR classifier on the testing data and plot ROC curve
+y_pred_proba = ovr_clf2.predict_proba(X_test)
+n_classes = len(set(y))
+fpr = dict()
+tpr = dict()
+roc_auc = dict()
+for i in range(n_classes):
+    fpr[i], tpr[i], _ = roc_curve(y_test == i, ovr_clf2.predict_proba(X_test)[:, i])
+    roc_auc[i] = roc_auc_score(y_test == i, ovr_clf2.predict_proba(X_test)[:, i])
+# plot the ROC curves and AUC scores
+plt.figure()
+lw = 2
+for i in range(n_classes):
+    plt.plot(fpr[i], tpr[i], lw=lw, label='ROC curve (area = %0.2f) for class %d' % (roc_auc[i], i))
+plt.plot([0, 1], [0, 1], color='gray', lw=lw, linestyle='--')
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Receiver Operating Characteristic')
+plt.legend(loc="lower right")
+plt.show()
+
+y_pred3 = ovr_clf2.predict(X_test)
+print(classification_report(y_test, y_pred3))
+
+from sklearn.metrics import confusion_matrix
+cm = confusion_matrix(y_test, y_pred3)
+print("Confusion Matrix : \n", cm)
+from sklearn.metrics import accuracy_score, confusion_matrix, roc_auc_score, roc_curve
+print ("Accuracy : ", accuracy_score(y_test, y_pred3))
+confusion_matrix = pd.crosstab(y_test, y_pred3, rownames=['Actual'], colnames=['Predicted'])
+sn.heatmap(confusion_matrix, annot=True)
+plt.imshow(confusion_matrix, cmap=plt.cm.Blues)
+plt.title('Confusion Matrix')
+plt.show()
+
+

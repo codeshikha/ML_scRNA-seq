@@ -1,0 +1,128 @@
+import xgboost as xgb
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.metrics import roc_curve, auc, confusion_matrix
+import matplotlib.pyplot as plt
+import shap
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split, GridSearchCV
+import xgboost as xgb
+from sklearn.metrics import accuracy_score, confusion_matrix
+import shap
+from imblearn.over_sampling import SMOTE
+from collections import Counter
+import seaborn as sn
+import matplotlib.pyplot as plt
+from sklearn.multiclass import OneVsRestClassifier
+from sklearn.metrics import classification_report, roc_auc_score, roc_curve
+from imblearn.over_sampling import SMOTE
+from xgboost import XGBClassifier
+from sklearn.multiclass import OneVsRestClassifier
+
+# generate imbalanced multiclass classification data
+df = pd.read_csv('path of the data file')
+print(df.head())
+# Separate features and target variable
+print(df.head())
+X = df.iloc[:, 1:]
+y = df.iloc[:, 0]
+
+# Split data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y,stratify=y, test_size=0.3, random_state=1000)
+
+smote = SMOTE(random_state=42)
+X_train_res, y_train_res = smote.fit_resample(X_train, y_train)
+
+counter = Counter(y_train_res)
+print(counter)
+
+
+# Create the XGBoost classifier object
+xgb_clf = xgb.XGBClassifier(random_state=42, objective='multi:softmax')
+
+# Perform GridSearchCV to find optimal hyperparameters
+params = {
+    'n_estimators': [50, 100, 200, 300],
+    'max_depth': [1, 3, 5, 7],
+    'learning_rate': [.001, 0.01, 0.1, 0.5]
+}
+
+grid_search = GridSearchCV(xgb_clf, params, cv=5, scoring='accuracy', verbose=2)
+grid_search.fit(X_train_res, y_train_res)
+
+best_params = grid_search.best_params_
+
+# print the best parameters and mean cross-validated score
+print('Best parameters:', grid_search.best_params_)
+print('Mean cross-validated score:', grid_search.best_score_)
+xgb_clf = xgb.XGBClassifier(random_state=42, objective='multi:softmax', **best_params)
+
+# Train the classifier on the training data
+xgb_clf.fit(X_train_res, y_train_res)
+
+y_pred1 = xgb_clf.predict(X_test)
+print(classification_report(y_test, y_pred1))
+
+
+# Calculate SHAP feature importance
+explainer = shap.TreeExplainer(xgb_clf)
+shap_values = explainer.shap_values(X_test)
+shap.summary_plot(shap_values, X_test, plot_type='bar')
+plt.title('SHAP values for instance 0')
+plt.show()
+
+from sklearn.multiclass import OneVsRestClassifier
+xgb_clf2 = xgb.XGBClassifier(objective='multi:softprob', num_class=len(set(y)), **best_params)
+# Train the classifier on the training data
+xgb_clf2.fit(X_train_res, y_train_res)
+# Convert the trained model to One vs Rest (OvR) classifier
+ovr_clf2 = OneVsRestClassifier(xgb_clf2)
+ovr_clf2.fit(X_train_res, y_train_res)
+
+
+# Evaluate the OvR classifier on the testing data and plot ROC curve
+y_pred_proba = ovr_clf.predict_proba(X_test)n_classes = len(set(y))
+fpr = dict()
+tpr = dict()
+roc_auc = dict()
+for i in range(n_classes):
+    fpr[i], tpr[i], _ = roc_curve(y_test == i, ovr_clf.predict_proba(X_test)[:, i])
+    roc_auc[i] = roc_auc_score(y_test == i, ovr_clf.predict_proba(X_test)[:, i])
+# plot the ROC curves and AUC scores
+plt.figure()
+lw = 2
+for i in range(n_classes):
+    plt.plot(fpr[i], tpr[i], lw=lw, label='ROC curve (area = %0.2f) for class %d' % (roc_auc[i], i))
+plt.plot([0, 1], [0, 1], color='gray', lw=lw, linestyle='--')
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Receiver Operating Characteristic')
+plt.legend(loc="lower right")
+plt.show()
+
+y_pred3 = ovr_clf2.predict(X_test)
+print(classification_report(y_test, y_pred3))
+
+from sklearn.metrics import confusion_matrix
+cm = confusion_matrix(y_test, y_pred3)
+print("Confusion Matrix : \n", cm)
+from sklearn.metrics import accuracy_score, confusion_matrix, roc_auc_score, roc_curve
+print ("Accuracy : ", accuracy_score(y_test, y_pred3))
+confusion_matrix = pd.crosstab(y_test, y_pred3, rownames=['Actual'], colnames=['Predicted'])
+sn.heatmap(confusion_matrix, annot=True)
+plt.imshow(confusion_matrix, cmap=plt.cm.Blues)
+plt.title('Confusion Matrix')
+plt.show()
+# Plot a confusion matrix
+y_pred = ovr_clf.predict(X_test)
+cm = confusion_matrix(y_test, y_pred)
+plt.imshow(cm, cmap=plt.cm.Blues)
+plt.xlabel('Predicted labels')
+plt.ylabel('True labels')
+plt.xticks([0, 1, 2], iris.target_names)
+plt.yticks([0, 1, 2], iris.target_names)
+plt.title('Confusion matrix')
+plt.colorbar()
+plt.show()
